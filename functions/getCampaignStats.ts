@@ -15,17 +15,17 @@ Deno.serve(async (req: Request) => {
   try {
     const base44 = createClientFromRequest(req);
 
-    const positions = await base44.entities.SponsorPosition.list();
-    const sponsors = await base44.entities.Sponsor.list();
-    const nominations = await base44.entities.Nomination.list();
-    const activities = await base44.entities.CampaignActivity.list();
+    const positions = await base44.asServiceRole.entities.SponsorPosition.list();
+    const sponsors = await base44.asServiceRole.entities.Sponsor.list();
+    const nominations = await base44.asServiceRole.entities.Nomination.list();
+    const activities = await base44.asServiceRole.entities.CampaignActivity.list();
 
     const now = new Date();
 
     // 1. AUTO-RELEASE expired holds
     for (const p of positions) {
       if (p.positionState === 'hold' && p.holdUntil && new Date(p.holdUntil) < now) {
-        await base44.entities.SponsorPosition.update(p.id, {
+        await base44.asServiceRole.entities.SponsorPosition.update(p.id, {
           positionState: 'available', isAvailable: true, holdBy: null, holdUntil: null
         });
         p.positionState = 'available'; p.isAvailable = true; p.holdBy = null; p.holdUntil = null;
@@ -42,7 +42,7 @@ Deno.serve(async (req: Request) => {
         const basePrice = p.basePrice || 50000;
         const dynamicPrice = basePrice + (soldHoldFoundingCount * 5000);
         if (p.price !== dynamicPrice) {
-          await base44.entities.SponsorPosition.update(p.id, { price: dynamicPrice });
+          await base44.asServiceRole.entities.SponsorPosition.update(p.id, { price: dynamicPrice });
           p.price = dynamicPrice;
         }
       }

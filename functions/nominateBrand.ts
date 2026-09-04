@@ -30,7 +30,7 @@ Deno.serve(async (req: Request) => {
     const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || req.headers.get('x-real-ip') || 'unknown';
     const now = Date.now();
 
-    const activities = await base44.entities.CampaignActivity.list();
+    const activities = await base44.asServiceRole.entities.CampaignActivity.list();
 
     // 1. Rate limit: 1 nomination per IP per 60 seconds
     const recentNomination = activities.find((act: any) =>
@@ -43,7 +43,7 @@ Deno.serve(async (req: Request) => {
       return json({ success: false, error: "Slow down — one nomination per minute." }, 429);
     }
 
-    const nominations = await base44.entities.Nomination.list();
+    const nominations = await base44.asServiceRole.entities.Nomination.list();
 
     // 2. Email dedup
     if (nominatorEmail && typeof nominatorEmail === 'string' && nominatorEmail.trim()) {
@@ -65,9 +65,9 @@ Deno.serve(async (req: Request) => {
     if (existing) {
       totalVotes = (existing.votes || 0) + 1;
       nominationId = existing.id;
-      await base44.entities.Nomination.update(existing.id, { votes: totalVotes, lastVoteAt: new Date(now).toISOString() });
+      await base44.asServiceRole.entities.Nomination.update(existing.id, { votes: totalVotes, lastVoteAt: new Date(now).toISOString() });
     } else {
-      const created = await base44.entities.Nomination.create({
+      const created = await base44.asServiceRole.entities.Nomination.create({
         brandName: trimmedBrand,
         brandWebsite: brandWebsite || '',
         nominatorName: nominatorName || 'Anonymous',
@@ -79,7 +79,7 @@ Deno.serve(async (req: Request) => {
       nominationId = created.id;
     }
 
-    await base44.entities.CampaignActivity.create({
+    await base44.asServiceRole.entities.CampaignActivity.create({
       activityType: 'nomination',
       source: 'website',
       referrer: clientIp,

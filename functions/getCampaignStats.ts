@@ -1,6 +1,17 @@
 import { createClientFromRequest } from "npm:@base44/sdk@0.8.31";
 
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type'
+};
+
+function json(data: any, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...CORS } });
+}
+
 Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   try {
     const base44 = createClientFromRequest(req);
 
@@ -11,24 +22,18 @@ Deno.serve(async (req: Request) => {
 
     const now = new Date();
 
-    // 1. AUTO-RELEASE expired holds: if positionState === 'hold' && holdUntil < now, reset to available
+    // 1. AUTO-RELEASE expired holds
     for (const p of positions) {
       if (p.positionState === 'hold' && p.holdUntil && new Date(p.holdUntil) < now) {
         await base44.entities.SponsorPosition.update(p.id, {
-          positionState: 'available',
-          isAvailable: true,
-          holdBy: null,
-          holdUntil: null
+          positionState: 'available', isAvailable: true, holdBy: null, holdUntil: null
         });
-        p.positionState = 'available';
-        p.isAvailable = true;
-        p.holdBy = null;
-        p.holdUntil = null;
+        p.positionState = 'available'; p.isAvailable = true; p.holdBy = null; p.holdUntil = null;
       }
     }
 
-    // 2. Calculate Founding tier dynamic pricing: price = basePrice + (count of sold/hold founding positions) * 5000. Update each founding position's price field.
-    const soldHoldFoundingCount = positions.filter((p: any) => 
+    // 2. Founding dynamic pricing: basePrice + (sold/hold founding count) * 5000
+    const soldHoldFoundingCount = positions.filter((p: any) =>
       p.tier === 'founding' && (p.positionState === 'sold' || p.positionState === 'hold')
     ).length;
 
@@ -43,96 +48,56 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // 3. Count only paid+active sponsors as raised total
-    const activeSponsors = sponsors.filter((s: any) => 
+    // 3. Raised total: paid+active sponsors only
+    const activeSponsors = sponsors.filter((s: any) =>
       s.status === 'active' && s.paymentStatus === 'paid'
     );
-    const totalRaised = activeSponsors.reduce((sum: number, s: any) => 
-      sum + (s.amount || s.bidAmount || 0), 0
-    );
-    const totalTarget = 600000;
+    const totalRaised = activeSponsors.reduce((sum: number, s: any) => sum + (s.amount || 0), 0);
+    const totalTarget = 450000;
 
-    // 4. Build leaderboard (paid sponsors only)
+    // 4. Leaderboard (paid sponsors only)
     const leaderboard = activeSponsors
       .map((s: any) => ({
-        id: s.id,
-        position: s.positionLabel,
-        positionNumber: s.positionNumber,
-        brandName: s.brandName,
-        amount: s.amount || s.bidAmount || 0,
-        tier: s.tier,
-        logoUrl: s.logoUrl,
-        website: s.website,
-        category: s.category
+        id: s.id, position: s.positionLabel, positionNumber: s.positionNumber,
+        brandName: s.brandName, amount: s.amount || 0,
+        tier: s.tier, logoUrl: s.logoUrl, website: s.website, category: s.category
       }))
       .sort((a: any, b: any) => b.amount - a.amount);
 
     // 5. Top nominations
     const topNominations = nominations
-      .map((n: any) => ({
-        id: n.id,
-        brandName: n.brandName,
-        brandWebsite: n.brandWebsite,
-        votes: n.votes || 0,
-        reason: n.reason
-      }))
+      .map((n: any) => ({ id: n.id, brandName: n.brandName, brandWebsite: n.brandWebsite, votes: n.votes || 0, reason: n.reason }))
       .sort((a: any, b: any) => b.votes - a.votes)
       .slice(0, 10);
 
-    // 6. Campaign counts
+    // 6. Counts
     const positionsTotal = positions.length;
     const positionsTaken = positions.filter((p: any) => p.positionState === 'sold').length;
     const positionsHeld = positions.filter((p: any) => p.positionState === 'hold').length;
-    const positionsAvailable = positions.filter((p: any) => p.positionState === 'available' || (p.isAvailable && p.positionState !== 'sold' && p.positionState !== 'hold')).length;
-    const pendingApplications = sponsors.filter((s: any) => 
+    const positionsAvailable = positions.filter((p: any) =>
+      p.positionState === 'available' || (p.isAvailable && p.positionState !== 'sold' && p.positionState !== 'hold')
+    ).length;
+    const pendingApplications = sponsors.filter((s: any) =>
       s.status === 'applied' || s.status === 'hold' || s.paymentStatus === 'pending'
     ).length;
 
-    // 7. Stats object
+    // 7. Stats
     const pageViews = activities.filter((a: any) => a.activityType === 'page_view').length;
     const qrScans = activities.filter((a: any) => a.activityType === 'qr_scan').length;
     const shares = activities.filter((a: any) => a.activityType === 'share').length;
     const applications = activities.filter((a: any) => a.activityType === 'application').length;
 
-    // 8. Crown position auction object
-    const crownPosition = positions.find((p: any) => p.tier === 'crown' || p.positionNumber === 1);
-    let auction = null;
-    if (crownPosition) {
-      const currentBid = crownPosition.currentBid || crownPosition.basePrice || 100000;
-      const minNextBid = crownPosition.minNextBid || (currentBid + 10000);
-      const auctionEnd = crownPosition.auctionEndTime ? new Date(crownPosition.auctionEndTime).getTime() : 0;
-      const timeRemaining = auctionEnd ? Math.max(0, auctionEnd - Date.now()) : 0;
-
-      auction = {
-        positionNumber: crownPosition.positionNumber,
-        currentBid,
-        highestBidderName: crownPosition.highestBidderName || "No bids yet",
-        highestBidderEmail: crownPosition.highestBidderEmail || "",
-        minNextBid,
-        bidCount: crownPosition.bidCount || 0,
-        auctionEndTime: crownPosition.auctionEndTime || null,
-        timeRemaining
-      };
-    }
-
     const result = {
       campaign: {
-        name: "The Sponsored MacBook",
-        tagline: "Can 20 brands fund one MacBook? An experiment in brand-funded creativity.",
+        name: "The Chrome Canvas",
+        tagline: "21 brands. One chrome café racer. 12 months of documented attention. The most public ad space in India.",
         target: totalTarget,
         raised: totalRaised,
         progressPercent: Math.min(100, Math.round((totalRaised / totalTarget) * 100)),
-        positionsTotal,
-        positionsTaken,
-        positionsHeld,
-        positionsAvailable,
-        pendingApplications
+        positionsTotal, positionsTaken, positionsHeld, positionsAvailable, pendingApplications
       },
       stats: {
-        pageViews,
-        qrScans,
-        shares,
-        applications,
+        pageViews, qrScans, shares, applications,
         totalNominations: nominations.length,
         totalSponsors: activeSponsors.length
       },
@@ -143,31 +108,18 @@ Deno.serve(async (req: Request) => {
         displayLabel: p.displayLabel,
         positionName: p.positionName || p.displayLabel,
         price: p.price || p.basePrice || 0,
-        basePrice: p.basePrice || p.price || 0,
         tier: p.tier,
         positionState: p.positionState || (p.isAvailable ? 'available' : 'sold'),
         isAvailable: Boolean(p.isAvailable && p.positionState !== 'sold' && p.positionState !== 'hold'),
         category: p.category || null,
         description: p.description || '',
-        currentBid: p.tier === 'crown' ? (p.currentBid || p.basePrice || 100000) : undefined,
-        highestBidderName: p.tier === 'crown' ? p.highestBidderName : undefined,
-        minNextBid: p.tier === 'crown' ? (p.minNextBid || ((p.currentBid || p.basePrice || 100000) + 10000)) : undefined,
-        auctionEndTime: p.tier === 'crown' ? p.auctionEndTime : undefined,
-        bidCount: p.tier === 'crown' ? (p.bidCount || 0) : undefined
-      })),
-      auction
+        partName: p.partName || '',
+        sizeLabel: p.sizeLabel || ''
+      }))
     };
 
-    return new Response(JSON.stringify(result), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return json(result);
   } catch (error) {
-    return new Response(JSON.stringify({ 
-      error: 'Failed to fetch campaign stats', 
-      details: String(error) 
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return json({ error: 'Failed to fetch campaign stats', details: String(error) }, 500);
   }
 });

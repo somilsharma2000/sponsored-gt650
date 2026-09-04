@@ -33,7 +33,7 @@ Deno.serve(async (req: Request) => {
 
     if (!activityType) return json({ success: false, error: "activityType is required" }, 400);
 
-    const activity = await base44.entities.CampaignActivity.create({
+    const activity = await base44.asServiceRole.entities.CampaignActivity.create({
       activityType,
       source: source || 'website',
       referrer: referrer || '',
@@ -45,15 +45,15 @@ Deno.serve(async (req: Request) => {
 
     // Analytics counters on Sponsor
     if (sponsorId) {
-      const sponsors = await base44.entities.Sponsor.list();
+      const sponsors = await base44.asServiceRole.entities.Sponsor.list();
       const sponsor = sponsors.find((s: any) => s.id === sponsorId || s.trackingId === sponsorId);
       if (sponsor) {
         if (activityType === 'qr_scan') {
-          await base44.entities.Sponsor.update(sponsor.id, { qrScans: (sponsor.qrScans || 0) + 1 });
+          await base44.asServiceRole.entities.Sponsor.update(sponsor.id, { qrScans: (sponsor.qrScans || 0) + 1 });
         } else if (activityType === 'share' || activityType === 'share_click') {
-          await base44.entities.Sponsor.update(sponsor.id, { shareClicks: (sponsor.shareClicks || 0) + 1 });
+          await base44.asServiceRole.entities.Sponsor.update(sponsor.id, { shareClicks: (sponsor.shareClicks || 0) + 1 });
         } else if (activityType === 'social_mention') {
-          await base44.entities.Sponsor.update(sponsor.id, { socialMentions: (sponsor.socialMentions || 0) + 1 });
+          await base44.asServiceRole.entities.Sponsor.update(sponsor.id, { socialMentions: (sponsor.socialMentions || 0) + 1 });
         }
       }
     }

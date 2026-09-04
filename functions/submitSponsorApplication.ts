@@ -26,7 +26,7 @@ Deno.serve(async (req: Request) => {
       return json({ success: false, error: "Missing required fields: brandName, contactEmail, positionNumber" }, 400);
     }
 
-    const positions = await base44.entities.SponsorPosition.list();
+    const positions = await base44.asServiceRole.entities.SponsorPosition.list();
     const position = positions.find((p: any) => p.positionNumber === Number(positionNumber));
     if (!position) return json({ success: false, error: "Position not found" }, 404);
 
@@ -35,7 +35,7 @@ Deno.serve(async (req: Request) => {
 
     // Auto-release expired hold
     if (position.positionState === 'hold' && position.holdUntil && new Date(position.holdUntil) < now) {
-      await base44.entities.SponsorPosition.update(position.id, {
+      await base44.asServiceRole.entities.SponsorPosition.update(position.id, {
         positionState: 'available', isAvailable: true, holdBy: null, holdUntil: null
       });
       position.positionState = 'available'; position.isAvailable = true; position.holdUntil = null; position.holdBy = null;
@@ -50,7 +50,7 @@ Deno.serve(async (req: Request) => {
     // Category exclusivity
     const targetCategory = (category || position.category || '').toLowerCase().trim();
     if (targetCategory) {
-      const sponsors = await base44.entities.Sponsor.list();
+      const sponsors = await base44.asServiceRole.entities.Sponsor.list();
       const existingPaidSponsor = sponsors.find((s: any) =>
         s.paymentStatus === 'paid' && s.status === 'active' &&
         s.category && s.category.toLowerCase().trim() === targetCategory
@@ -76,7 +76,7 @@ Deno.serve(async (req: Request) => {
     const trackingId = `CC-${Date.now().toString(36).toUpperCase()}-${positionNumber}`;
     const uniqueUrl = `?ref=${trackingId}`;
 
-    const sponsor = await base44.entities.Sponsor.create({
+    const sponsor = await base44.asServiceRole.entities.Sponsor.create({
       brandName,
       contactName: contactName || '',
       contactEmail,
@@ -106,14 +106,14 @@ Deno.serve(async (req: Request) => {
       campaignId: 'sponsored-gt650-2026'
     });
 
-    await base44.entities.SponsorPosition.update(position.id, {
+    await base44.asServiceRole.entities.SponsorPosition.update(position.id, {
       positionState: 'hold',
       isAvailable: false,
       holdUntil: holdExpiry,
       holdBy: sponsor.id
     });
 
-    await base44.entities.CampaignActivity.create({
+    await base44.asServiceRole.entities.CampaignActivity.create({
       activityType: 'application',
       source: 'website',
       sponsorId: sponsor.id,

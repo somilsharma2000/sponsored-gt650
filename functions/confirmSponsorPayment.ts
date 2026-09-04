@@ -23,21 +23,21 @@ Deno.serve(async (req: Request) => {
     const { sponsorId } = body;
     if (!sponsorId) return json({ success: false, error: "sponsorId is required to confirm payment" }, 400);
 
-    const sponsors = await base44.entities.Sponsor.list();
+    const sponsors = await base44.asServiceRole.entities.Sponsor.list();
     const sponsor = sponsors.find((s: any) => s.id === sponsorId);
     if (!sponsor) return json({ success: false, error: "Sponsor not found" }, 404);
 
-    await base44.entities.Sponsor.update(sponsor.id, {
+    await base44.asServiceRole.entities.Sponsor.update(sponsor.id, {
       status: 'active',
       paymentStatus: 'paid',
       holdExpiry: null,
       lastActivityAt: new Date().toISOString()
     });
 
-    const positions = await base44.entities.SponsorPosition.list();
+    const positions = await base44.asServiceRole.entities.SponsorPosition.list();
     const position = positions.find((p: any) => p.positionNumber === sponsor.positionNumber);
     if (position) {
-      await base44.entities.SponsorPosition.update(position.id, {
+      await base44.asServiceRole.entities.SponsorPosition.update(position.id, {
         positionState: 'sold',
         isAvailable: false,
         holdUntil: null,
@@ -48,7 +48,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    await base44.entities.CampaignActivity.create({
+    await base44.asServiceRole.entities.CampaignActivity.create({
       activityType: 'payment_confirmed',
       source: 'payment_gateway',
       sponsorId: sponsor.id,

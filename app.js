@@ -178,11 +178,13 @@ function tickCountdowns() {
   const now = Date.now();
   const diff = CAMPAIGN_END - now;
   const daysEl = document.getElementById('statDays');
-  if (diff > 0) {
-    const d = Math.ceil(diff / 86400000);
-    daysEl.textContent = d;
-  } else {
-    daysEl.textContent = '0';
+  if (daysEl) {
+    if (diff > 0) {
+      const d = Math.ceil(diff / 86400000);
+      daysEl.textContent = d;
+    } else {
+      daysEl.textContent = '0';
+    }
   }
   if (holdDeadline) {
     const rem = holdDeadline - now;
